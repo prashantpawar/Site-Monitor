@@ -2,7 +2,7 @@
 
 # sample usage: checksites.py eriwen.com nixtutor.com yoursite.org
 
-import pickle, os, sys, logging, time, urllib2, re
+import pickle, os, sys, logging, time, urllib2, re, pprint
 from optparse import OptionParser, OptionValueError
 from smtplib import SMTP
 from getpass import getuser
@@ -52,6 +52,36 @@ def get_headers(url):
         return urllib2.urlopen(url).info().headers
     except:
         return 'Headers unavailable'
+
+def get_body(url):
+    '''Gets body from URL request and returns'''
+    try:
+        return urllib2.urlopen(url).read()
+    except:
+        return 'Body unavailable'
+
+def verify_pattern(alerter, pattern, inverse):
+
+    def is_pattern_found(url):
+        body = get_body(url)
+        try:
+            m = body.index(pattern)
+            if inverse:
+                status = False
+                alerter(url, status)
+            else:
+                status = True
+        except ValueError:
+            if inverse:
+                status = True
+            else:
+                status = False
+                alerter(url, status)
+            return status
+
+        return status
+    
+    return is_pattern_found
 
 def compare_site_status(prev_results, alerter):
     '''Report changed status based on previous results'''
@@ -162,6 +192,12 @@ def get_command_line_options():
     parser.add_option("-f","--from-file", dest="from_file",
             help="Import urls from a text file. Separated by newline.")
 
+    parser.add_option("-a","--pattern", dest="pattern",
+            help="Searches for the pattern on the page")
+
+    parser.add_option("-v","--invert-pattern", dest="inverse",
+            help="Considers the pattern provided by --pattern parameter as a failed test")
+
     return parser.parse_args()
 
 def main():
@@ -212,7 +248,13 @@ def main():
 
     # Check sites only if Internet is_available
     if is_internet_reachable():
-        status_checker = compare_site_status(pickledata, alerter)
+        if options.pattern:
+            if options.inverse:
+                status_checker = verify_pattern(alerter, options.pattern, options.inverse)
+            else:
+                status_checker = verify_pattern(alerter, options.pattern, False)
+        else:
+            status_checker = compare_site_status(pickledata, alerter)
         map(status_checker, urls)
     else:
         logging.error('Either the world ended or we are not connected to the net.')
